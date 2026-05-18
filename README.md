@@ -35,6 +35,7 @@ All services run as **systemd units** — they start on boot, restart on crash, 
 ## Features
 
 - **Live H.264 stream** from Sony IMX500 with AI object detection (MobileNet SSD)
+- **Sub-second latency over WebRTC** (~200–350 ms end-to-end over Tailscale) — tuned with `tune=zerolatency` to eliminate libx264's lookahead buffer
 - **Multiple protocols** — RTSP, HLS, WebRTC served simultaneously from one source
 - **Remote access** via Tailscale VPN — works from any network, any country
 - **No port forwarding** — Tailscale handles NAT traversal automatically

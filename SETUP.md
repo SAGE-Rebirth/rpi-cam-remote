@@ -180,10 +180,12 @@ You will see output like:
 Local network
   RTSP    →  rtsp://10.x.x.x:8554/cam
   HLS     →  http://10.x.x.x:8888/cam
+  WebRTC  →  http://10.x.x.x:8889/cam
 
 Remote via Tailscale
   RTSP    →  rtsp://100.x.x.x:8554/cam
   HLS     →  http://100.x.x.x:8888/cam
+  WebRTC  →  http://100.x.x.x:8889/cam
   API     →  http://100.x.x.x:9997
 
 Mac ffplay command
@@ -194,7 +196,17 @@ Mac ffplay command
 
 ## Step 7 — Watch the Stream on Your Mac
 
-**Option A — ffplay (lowest latency, recommended):**
+**Option A — Browser via WebRTC (recommended, no install needed):**
+
+Open Chrome, Safari, or Firefox and go to:
+
+```
+http://100.x.x.x:8889/cam
+```
+
+WebRTC gives sub-second latency (typically 200–350 ms end-to-end over Tailscale) and works from any device with a modern browser. No plugins, no app — MediaMTX serves a built-in player page.
+
+**Option B — ffplay (also low latency, but requires install):**
 
 ```bash
 ffplay -fflags nobuffer -flags low_delay -framedrop \
@@ -205,15 +217,15 @@ ffplay -fflags nobuffer -flags low_delay -framedrop \
 
 > Install ffplay with: `brew install ffmpeg`
 
-**Option B — Browser (no install needed):**
-
-Open Safari or Chrome and go to:
+**Option C — Browser via HLS (universal fallback):**
 
 ```
 http://100.x.x.x:8888/cam
 ```
 
-> Use the `100.x.x.x` Tailscale IP, not the local `10.x.x.x` IP. The Tailscale IP works from any network anywhere in the world.
+Plays in any browser including mobile. Higher latency than WebRTC (typically 1–2 s) — useful only if WebRTC is somehow blocked or unavailable.
+
+> Use the `100.x.x.x` Tailscale IP, not the local `10.x.x.x` IP. The Tailscale IP works from any network, anywhere in the world.
 
 ---
 
