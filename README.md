@@ -199,9 +199,9 @@ Default settings:
 
 ```
 Resolution : 640 × 480
-Framerate  : 15 fps
-Bitrate    : 1,500,000 bps (1.5 Mbps)
-Codec      : H.264 (baseline profile, 1s GOP, inline SPS/PPS)
+Framerate  : 30 fps
+Bitrate    : 2,500,000 bps (2.5 Mbps)
+Codec      : H.264 (baseline profile, 1s GOP, inline SPS/PPS, low-latency flush)
 AI model   : MobileNet SSD (imx500_mobilenet_ssd.json)
 ```
 

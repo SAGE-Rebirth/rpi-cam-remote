@@ -17,19 +17,22 @@ rpicam-vid \
     --nopreview \
     --codec h264 \
     --libav-format h264 \
+    --libav-video-codec-opts "preset=ultrafast;tune=zerolatency" \
     --profile baseline \
-    --intra 15 \
+    --intra 30 \
     --inline \
+    --flush \
     --width 640 \
     --height 480 \
-    --framerate 15 \
-    --bitrate 1500000 \
+    --framerate 30 \
+    --bitrate 2500000 \
     --post-process-file /usr/share/rpi-camera-assets/imx500_mobilenet_ssd.json \
     -o - | \
 ffmpeg \
     -hide_banner \
     -loglevel warning \
-    -fflags nobuffer \
+    -fflags +nobuffer+flush_packets \
+    -flags low_delay \
     -f h264 \
     -i pipe:0 \
     -c:v copy \

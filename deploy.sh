@@ -23,8 +23,8 @@ hr()   { echo -e "${BLUE}──────────────────�
 CAMERA_USER="${SUDO_USER:-pi}"
 STREAM_WIDTH=640
 STREAM_HEIGHT=480
-STREAM_FPS=15
-STREAM_BITRATE=1500000
+STREAM_FPS=30
+STREAM_BITRATE=2500000
 STREAM_PATH="cam"
 POST_PROCESS_FILE="/usr/share/rpi-camera-assets/imx500_mobilenet_ssd.json"
 
@@ -142,9 +142,11 @@ rpicam-vid \\
     --nopreview \\
     --codec h264 \\
     --libav-format h264 \\
+    --libav-video-codec-opts "preset=ultrafast;tune=zerolatency" \\
     --profile baseline \\
     --intra ${STREAM_FPS} \\
     --inline \\
+    --flush \\
     --width ${STREAM_WIDTH} \\
     --height ${STREAM_HEIGHT} \\
     --framerate ${STREAM_FPS} \\
@@ -154,7 +156,8 @@ rpicam-vid \\
 ffmpeg \\
     -hide_banner \\
     -loglevel warning \\
-    -fflags nobuffer \\
+    -fflags +nobuffer+flush_packets \\
+    -flags low_delay \\
     -f h264 \\
     -i pipe:0 \\
     -c:v copy \\
@@ -484,12 +487,12 @@ systemctl daemon-reload
 log "Enabling services for auto-start on boot..."
 systemctl enable mediamtx.service camera-stream.service
 
-log "Starting MediaMTX..."
-systemctl start mediamtx.service
+log "Restarting MediaMTX (picks up config changes)..."
+systemctl restart mediamtx.service
 sleep 4
 
-log "Starting camera stream..."
-systemctl start camera-stream.service
+log "Restarting camera stream (picks up script changes)..."
+systemctl restart camera-stream.service
 sleep 4
 
 # ─── Step 10: Final report ────────────────────────────────────
