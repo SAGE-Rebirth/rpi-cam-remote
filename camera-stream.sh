@@ -16,6 +16,7 @@ rpicam-vid \
     -t 0 \
     --nopreview \
     --codec h264 \
+    --libav-format h264 \
     --profile baseline \
     --intra 15 \
     --inline \

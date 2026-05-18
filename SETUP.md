@@ -15,29 +15,49 @@ A step-by-step beginner-friendly guide to get your Sony IMX500 camera streaming 
 
 ## Step 1 — Connect to the Pi via SSH
 
-On your Mac, open Terminal and connect:
+On your Mac, open Terminal. Most home networks resolve the Pi by its hostname over mDNS/Bonjour, so this usually works out of the box:
+
+```bash
+ssh test@pi.local
+```
+
+> `pi.local` is the default hostname on a fresh Raspberry Pi OS install. If you changed the hostname, swap it in (e.g., `test@mycam.local`).
+
+If `.local` resolution doesn't work on your network, use the Pi's IP address instead:
 
 ```bash
 ssh test@<pi-local-ip>
 ```
 
-> Replace `<pi-local-ip>` with your Pi's local IP. You can find it from your router, or if the Pi has a screen, run `hostname -I` on it.
+> To find the local IP: check your router's connected-devices page, or — if the Pi has a screen attached — run `hostname -I` on the Pi.
+
+First connection will prompt `Are you sure you want to continue connecting?` — type `yes` to accept the host key.
 
 ---
 
-## Step 2 — Download the Setup Files
+## Step 2 — Copy the Setup Files to the Pi
 
-On your Mac, download the zip from this project and copy it to the Pi:
+From your Mac, in the directory that contains `rpi-cam-stream.zip`, copy the zip to the Pi:
 
 ```bash
-scp rpi-cam-stream.zip test@<pi-local-ip>:~
+scp rpi-cam-stream.zip test@pi.local:~
 ```
+
+> If `pi.local` doesn't resolve, substitute the Pi's IP: `scp rpi-cam-stream.zip test@<pi-local-ip>:~`
 
 Then SSH into the Pi and extract:
 
 ```bash
-ssh test@<pi-local-ip>
-unzip rpi-cam-stream.zip
+ssh test@pi.local
+unzip -o rpi-cam-stream.zip
+```
+
+> `unzip -o` overwrites existing files without prompting — useful when re-deploying.
+
+**Optional — keep your home directory tidy** by extracting into a subdirectory:
+
+```bash
+mkdir -p rpi-cam && unzip -o rpi-cam-stream.zip -d rpi-cam && cd rpi-cam
 ```
 
 ---
