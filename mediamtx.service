@@ -1,0 +1,31 @@
+# /etc/systemd/system/mediamtx.service
+# ─────────────────────────────────────────────────────────────
+#  MediaMTX streaming server — starts on boot, restarts on crash
+# ─────────────────────────────────────────────────────────────
+
+[Unit]
+Description=MediaMTX Streaming Server
+Documentation=https://github.com/bluenviron/mediamtx
+After=network-online.target
+Wants=network-online.target
+# No restart cap — recover indefinitely (covers power failure, crashes)
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/mediamtx /etc/mediamtx/mediamtx.yml
+
+# ── Resilience ────────────────────────────────────────────────
+Restart=always
+RestartSec=5
+TimeoutStopSec=10
+LimitNOFILE=65536
+
+# ── Logging ───────────────────────────────────────────────────
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mediamtx
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,34 @@
+# ─────────────────────────────────────────────────────────────
+#  MediaMTX — RPi IMX500 Camera Stream Config
+#  Location on Pi: /etc/mediamtx/mediamtx.yml
+#  Docs: https://github.com/bluenviron/mediamtx
+# ─────────────────────────────────────────────────────────────
+
+logLevel: info
+logDestinations: [stdout]
+
+# ── Protocol listeners ────────────────────────────────────────
+rtspAddress:   :8554     # ffplay / VLC / mpv
+rtmpAddress:   :1935     # RTMP (kept available, not used)
+hlsAddress:    :8888     # Browser  → http://pi:8888/cam
+webrtcAddress: :8889     # WebRTC   → http://pi:8889/cam
+
+# ── REST API (cam-ctrl uses this for health checks) ───────────
+api: yes
+apiAddress: :9997
+metrics: no
+
+# ── HLS low-latency tuning ────────────────────────────────────
+hlsVariant:         lowLatency
+hlsSegmentCount:    7
+hlsSegmentDuration: 500ms
+hlsPartDuration:    200ms
+
+# ── Stream paths ──────────────────────────────────────────────
+paths:
+  cam:
+    # ffmpeg pushes RTSP here on port 8554.
+    # MediaMTX re-serves it as RTSP, HLS, and WebRTC automatically.
+    source: publisher
+    sourceOnDemand: no
+    record: no

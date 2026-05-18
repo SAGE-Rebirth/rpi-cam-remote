@@ -1,0 +1,233 @@
+#!/bin/bash
+# ─────────────────────────────────────────────────────────────
+#  cam-ctrl — IMX500 stream remote management tool
+#  Location: /usr/local/bin/cam-ctrl
+#
+#  SSH into Pi via Tailscale, then use this to manage the stream.
+#  Commands that change service state require sudo.
+# ─────────────────────────────────────────────────────────────
+
+CAM_SVC="camera-stream"
+MTX_SVC="mediamtx"
+MTX_API="http://localhost:9997"
+
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
+ok()   { echo -e "${GREEN}  ✓${NC} $*"; }
+fail() { echo -e "${RED}  ✗${NC} $*"; }
+info() { echo -e "${CYAN}  →${NC} $*"; }
+hr()   { echo -e "${BLUE}  ────────────────────────────────────${NC}"; }
+
+need_root() { [[ $EUID -ne 0 ]] && { echo -e "${RED}  This command needs sudo.${NC}"; exit 1; }; }
+
+svc_state() {
+    systemctl is-active --quiet "$1" \
+        && echo -e "${GREEN}running${NC}" \
+        || echo -e "${RED}stopped${NC}"
+}
+
+# ── start ─────────────────────────────────────────────────────
+cmd_start() {
+    need_root
+    info "Starting MediaMTX..."
+    systemctl start $MTX_SVC
+    sleep 3
+    info "Starting camera stream..."
+    systemctl start $CAM_SVC
+    sleep 2
+    echo; cmd_status
+}
+
+# ── stop ──────────────────────────────────────────────────────
+cmd_stop() {
+    need_root
+    info "Stopping camera stream..."
+    systemctl stop $CAM_SVC
+    info "Stopping MediaMTX..."
+    systemctl stop $MTX_SVC
+    ok "All services stopped."
+}
+
+# ── restart (camera only, MediaMTX stays up) ──────────────────
+cmd_restart() {
+    need_root
+    info "Restarting camera stream (MediaMTX stays up)..."
+    systemctl restart $CAM_SVC
+    sleep 2
+    echo; cmd_status
+}
+
+# ── restart-all (full restart) ────────────────────────────────
+cmd_restart_all() {
+    need_root
+    info "Restarting all services..."
+    systemctl restart $MTX_SVC
+    sleep 3
+    systemctl restart $CAM_SVC
+    sleep 2
+    echo; cmd_status
+}
+
+# ── status ────────────────────────────────────────────────────
+cmd_status() {
+    hr
+    echo -e "  MediaMTX        $(svc_state $MTX_SVC)"
+    echo -e "  Camera stream   $(svc_state $CAM_SVC)"
+    hr
+    # Print recent errors for any stopped service
+    for svc in $MTX_SVC $CAM_SVC; do
+        if ! systemctl is-active --quiet $svc; then
+            echo -e "${YELLOW}  Last $svc log:${NC}"
+            journalctl -u "$svc" -n 8 --no-pager -o short 2>/dev/null | sed 's/^/    /'
+            echo
+        fi
+    done
+}
+
+# ── logs ──────────────────────────────────────────────────────
+cmd_logs() {
+    echo -e "${BLUE}  === MediaMTX (last 40) ===${NC}"
+    journalctl -u $MTX_SVC -n 40 --no-pager
+    echo
+    echo -e "${BLUE}  === Camera stream (last 40) ===${NC}"
+    journalctl -u $CAM_SVC -n 40 --no-pager
+}
+
+# ── watch (live follow) ───────────────────────────────────────
+cmd_watch() {
+    echo -e "${CYAN}  Following live logs — Ctrl+C to stop${NC}"
+    journalctl -u $CAM_SVC -u $MTX_SVC -f --no-pager
+}
+
+# ── url ───────────────────────────────────────────────────────
+cmd_url() {
+    TS_IP=$(tailscale ip -4 2>/dev/null || echo "tailscale-not-connected")
+    LOCAL_IP=$(hostname -I | awk '{print $1}')
+    hr
+    echo -e "  ${CYAN}Local network${NC}"
+    echo "    RTSP    →  rtsp://$LOCAL_IP:8554/cam"
+    echo "    HLS     →  http://$LOCAL_IP:8888/cam"
+    echo "    WebRTC  →  http://$LOCAL_IP:8889/cam"
+    hr
+    echo -e "  ${CYAN}Remote via Tailscale${NC}"
+    echo "    RTSP    →  rtsp://$TS_IP:8554/cam"
+    echo "    HLS     →  http://$TS_IP:8888/cam"
+    echo "    WebRTC  →  http://$TS_IP:8889/cam"
+    echo "    API     →  http://$TS_IP:9997"
+    hr
+    echo -e "  ${CYAN}Mac ffplay command${NC}"
+    echo "    ffplay -fflags nobuffer -flags low_delay -framedrop -vf setpts=0 \\"
+    echo "           rtsp://$TS_IP:8554/cam"
+    hr
+}
+
+# ── test (health check) ───────────────────────────────────────
+cmd_test() {
+    hr
+    echo -e "  ${CYAN}Service health${NC}"
+    for svc in $MTX_SVC $CAM_SVC; do
+        systemctl is-active --quiet $svc \
+            && ok "$svc is running" \
+            || fail "$svc is NOT running"
+    done
+
+    echo
+    echo -e "  ${CYAN}MediaMTX API${NC}"
+    if curl -sf --max-time 3 "$MTX_API/v3/paths/list" > /dev/null 2>&1; then
+        ok "API reachable at $MTX_API"
+        RESULT=$(curl -sf "$MTX_API/v3/paths/list" 2>/dev/null | \
+            python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+items = d.get('items', [])
+ready = [i['name'] for i in items if i.get('ready', False)]
+print(f'{len(ready)} ready path(s): {ready}')
+" 2>/dev/null || echo "could not parse")
+        ok "$RESULT"
+    else
+        fail "API unreachable — is MediaMTX running?"
+    fi
+
+    echo
+    echo -e "  ${CYAN}Tailscale${NC}"
+    if command -v tailscale &>/dev/null; then
+        TS_IP=$(tailscale ip -4 2>/dev/null || echo "")
+        if [[ -n "$TS_IP" ]]; then
+            ok "Connected — Tailscale IP: $TS_IP"
+        else
+            fail "Tailscale installed but not connected. Run: sudo tailscale up"
+        fi
+    else
+        fail "Tailscale not installed. Run: curl -fsSL https://tailscale.com/install.sh | sh"
+    fi
+    hr
+}
+
+# ── enable / disable boot auto-start ──────────────────────────
+cmd_enable() {
+    need_root
+    systemctl enable $MTX_SVC $CAM_SVC
+    ok "Auto-start on boot: ENABLED"
+}
+
+cmd_disable() {
+    need_root
+    systemctl disable $MTX_SVC $CAM_SVC
+    echo -e "${YELLOW}  Auto-start on boot: DISABLED${NC}"
+}
+
+# ── config editor ─────────────────────────────────────────────
+cmd_config() {
+    need_root
+    "${EDITOR:-nano}" /etc/mediamtx/mediamtx.yml
+    echo
+    info "Restart all services to apply changes:"
+    echo "    sudo cam-ctrl restart-all"
+}
+
+# ── help ──────────────────────────────────────────────────────
+cmd_help() {
+    echo
+    echo -e "${CYAN}  cam-ctrl — IMX500 stream management${NC}"
+    echo
+    echo "  Service control  (requires sudo)"
+    echo "    start            Start MediaMTX + camera stream"
+    echo "    stop             Stop all services"
+    echo "    restart          Restart camera only (MediaMTX stays up)"
+    echo "    restart-all      Restart everything"
+    echo
+    echo "  Monitoring  (no sudo needed)"
+    echo "    status           Show running state of both services"
+    echo "    logs             Last 40 log lines from each service"
+    echo "    watch            Follow live logs (Ctrl+C to exit)"
+    echo "    test             Full health check: services + API + Tailscale"
+    echo "    url              Print all stream URLs (local + Tailscale)"
+    echo
+    echo "  Configuration  (requires sudo)"
+    echo "    config           Edit /etc/mediamtx/mediamtx.yml"
+    echo "    enable           Enable auto-start on boot"
+    echo "    disable          Disable auto-start on boot"
+    echo
+}
+
+# ── Dispatch ──────────────────────────────────────────────────
+case "${1:-status}" in
+    start)        cmd_start ;;
+    stop)         cmd_stop ;;
+    restart)      cmd_restart ;;
+    restart-all)  cmd_restart_all ;;
+    status)       cmd_status ;;
+    logs)         cmd_logs ;;
+    watch)        cmd_watch ;;
+    url)          cmd_url ;;
+    test)         cmd_test ;;
+    enable)       cmd_enable ;;
+    disable)      cmd_disable ;;
+    config)       cmd_config ;;
+    help|--help|-h) cmd_help ;;
+    *)
+        echo -e "${RED}  Unknown command: $1${NC}"
+        cmd_help
+        exit 1
+        ;;
+esac

@@ -1,0 +1,41 @@
+# /etc/systemd/system/camera-stream.service
+# ─────────────────────────────────────────────────────────────
+#  IMX500 Camera Stream — rpicam-vid → ffmpeg → MediaMTX
+#  Handles: boot, reboots, power failure, crashes, hung pipes
+# ─────────────────────────────────────────────────────────────
+
+[Unit]
+Description=RPi IMX500 Camera Stream (rpicam-vid + ffmpeg → MediaMTX)
+# Must come up AFTER mediamtx, and be torn down BEFORE it
+After=mediamtx.service network-online.target
+Requires=mediamtx.service
+Wants=network-online.target
+# No restart cap — recover indefinitely
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=pi
+SupplementaryGroups=video
+
+# Give MediaMTX's RTSP listener time to be ready before pushing
+ExecStartPre=/bin/sleep 3
+ExecStart=/usr/local/bin/camera-stream.sh
+
+# ── Resilience ────────────────────────────────────────────────
+# Restart covers: segfault, OOM kill, rpicam-vid error,
+#                 ffmpeg disconnect, power restore, reboot
+Restart=always
+RestartSec=5
+TimeoutStopSec=15
+
+# Kill entire cgroup so both rpicam-vid AND ffmpeg are stopped
+KillMode=control-group
+
+# ── Logging ───────────────────────────────────────────────────
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=camera-stream
+
+[Install]
+WantedBy=multi-user.target
