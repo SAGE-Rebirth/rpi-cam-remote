@@ -1,0 +1,11 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Claude Code — local-only settings (keep .claude/settings.json shareable)
+.claude/settings.local.json
+
+# Build artifacts — deployment zip is regenerated, not source
+*.zip
+
+CLAUDE.md

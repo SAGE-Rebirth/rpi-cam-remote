@@ -10,10 +10,10 @@ A production-ready, self-healing live video streaming setup using a **Raspberry 
 Sony IMX500 Camera
        │
        ▼
-  rpicam-vid  ──── MJPEG capture + AI post-processing (MobileNet SSD)
+  rpicam-vid  ──── H.264 capture + AI post-processing (MobileNet SSD)
        │ stdout pipe
        ▼
-    ffmpeg  ──── Re-wraps MJPEG → RTSP
+    ffmpeg  ──── Re-wraps H.264 → RTSP
        │ RTSP push (TCP, localhost:8554)
        ▼
    MediaMTX  ──── Streaming server (RTSP · HLS · WebRTC · REST API)
@@ -34,7 +34,7 @@ All services run as **systemd units** — they start on boot, restart on crash, 
 
 ## Features
 
-- **Live MJPEG stream** from Sony IMX500 with AI object detection (MobileNet SSD)
+- **Live H.264 stream** from Sony IMX500 with AI object detection (MobileNet SSD)
 - **Multiple protocols** — RTSP, HLS, WebRTC served simultaneously from one source
 - **Remote access** via Tailscale VPN — works from any network, any country
 - **No port forwarding** — Tailscale handles NAT traversal automatically
@@ -89,12 +89,12 @@ Replace `100.x.x.x` with your Pi's Tailscale IP (run `cam-ctrl url` to see it).
 
 | Protocol | URL | Best for |
 |---|---|---|
-| RTSP | `rtsp://100.x.x.x:8554/cam` | ffplay, VLC, mpv — lowest latency |
-| HLS | `http://100.x.x.x:8888/cam` | Any browser, no app needed |
-| WebRTC | `http://100.x.x.x:8889/cam` | Browser, but requires H264 (not MJPEG) |
+| RTSP | `rtsp://100.x.x.x:8554/cam` | ffplay, VLC, mpv — lowest latency desktop apps |
+| WebRTC | `http://100.x.x.x:8889/cam` | Browser, real-time (sub-second latency) |
+| HLS | `http://100.x.x.x:8888/cam` | Browser fallback, any device, no plugin needed |
 | REST API | `http://100.x.x.x:9997` | Health checks, path management |
 
-> **Note:** WebRTC requires H264 codec. The current pipeline uses MJPEG which is not WebRTC-compatible. Use RTSP or HLS for viewing.
+All three viewer protocols play the same H.264 stream simultaneously — no extra command on the Pi.
 
 ### Mac ffplay command
 
@@ -200,8 +200,8 @@ Default settings:
 ```
 Resolution : 640 × 480
 Framerate  : 15 fps
-Bitrate    : 5,000,000 bps (5 Mbps)
-Codec      : MJPEG
+Bitrate    : 1,500,000 bps (1.5 Mbps)
+Codec      : H.264 (baseline profile, 1s GOP, inline SPS/PPS)
 AI model   : MobileNet SSD (imx500_mobilenet_ssd.json)
 ```
 
@@ -212,9 +212,9 @@ sudo nano /usr/local/bin/camera-stream.sh
 sudo cam-ctrl restart
 ```
 
-To reduce bandwidth over Tailscale, lower the bitrate:
+To reduce bandwidth over Tailscale, lower the bitrate. H.264 is efficient — 600–1000 kbps is usually plenty at 640×480:
 ```
---bitrate 2000000
+--bitrate 800000
 ```
 
 ---
@@ -251,7 +251,7 @@ sudo cam-ctrl restart-all
 
 **Dropped frames / RTP missed packets**
 - Add `-rtsp_transport tcp` to your ffplay command
-- Lower bitrate in `camera-stream.sh` to 2000000
+- Lower bitrate in `camera-stream.sh` to 800000
 
 **Tailscale shows as not connected**
 ```bash

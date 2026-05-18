@@ -15,18 +15,21 @@ echo "[camera-stream] Starting IMX500 capture pipeline..."
 rpicam-vid \
     -t 0 \
     --nopreview \
-    --codec mjpeg \
+    --codec h264 \
+    --profile baseline \
+    --intra 15 \
+    --inline \
     --width 640 \
     --height 480 \
     --framerate 15 \
-    --bitrate 5000000 \
+    --bitrate 1500000 \
     --post-process-file /usr/share/rpi-camera-assets/imx500_mobilenet_ssd.json \
     -o - | \
 ffmpeg \
     -hide_banner \
     -loglevel warning \
     -fflags nobuffer \
-    -f mjpeg \
+    -f h264 \
     -i pipe:0 \
     -c:v copy \
     -f rtsp \

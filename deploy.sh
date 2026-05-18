@@ -24,7 +24,7 @@ CAMERA_USER="${SUDO_USER:-pi}"
 STREAM_WIDTH=640
 STREAM_HEIGHT=480
 STREAM_FPS=15
-STREAM_BITRATE=5000000
+STREAM_BITRATE=1500000
 STREAM_PATH="cam"
 POST_PROCESS_FILE="/usr/share/rpi-camera-assets/imx500_mobilenet_ssd.json"
 
@@ -140,7 +140,10 @@ echo "[camera-stream] Starting IMX500 capture pipeline..."
 rpicam-vid \\
     -t 0 \\
     --nopreview \\
-    --codec mjpeg \\
+    --codec h264 \\
+    --profile baseline \\
+    --intra ${STREAM_FPS} \\
+    --inline \\
     --width ${STREAM_WIDTH} \\
     --height ${STREAM_HEIGHT} \\
     --framerate ${STREAM_FPS} \\
@@ -151,7 +154,7 @@ ffmpeg \\
     -hide_banner \\
     -loglevel warning \\
     -fflags nobuffer \\
-    -f mjpeg \\
+    -f h264 \\
     -i pipe:0 \\
     -c:v copy \\
     -f rtsp \\
