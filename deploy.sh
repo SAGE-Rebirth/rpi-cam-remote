@@ -26,7 +26,16 @@ STREAM_HEIGHT=480
 STREAM_FPS=30
 STREAM_BITRATE=2500000
 STREAM_PATH="cam"
-POST_PROCESS_FILE="/usr/share/rpi-camera-assets/imx500_mobilenet_ssd.json"
+
+# Object detection AI preset — comment the next line to disable AI post-processing
+# POST_PROCESS_FILE="/usr/share/rpi-camera-assets/imx500_mobilenet_ssd.json"
+
+# Build optional rpicam-vid args (empty when POST_PROCESS_FILE is commented out)
+if [[ -n "${POST_PROCESS_FILE:-}" ]]; then
+    RPICAM_EXTRA_ARGS="--post-process-file ${POST_PROCESS_FILE}"
+else
+    RPICAM_EXTRA_ARGS=""
+fi
 
 hr
 echo -e "${CYAN}  RPi IMX500 Camera Stream Setup${NC}"
@@ -151,7 +160,7 @@ rpicam-vid \\
     --height ${STREAM_HEIGHT} \\
     --framerate ${STREAM_FPS} \\
     --bitrate ${STREAM_BITRATE} \\
-    --post-process-file ${POST_PROCESS_FILE} \\
+    ${RPICAM_EXTRA_ARGS} \\
     -o - | \\
 ffmpeg \\
     -hide_banner \\

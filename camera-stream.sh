@@ -10,6 +10,16 @@
 # of the pipe — rpicam-vid and ffmpeg — before exiting.
 trap 'kill 0' SIGTERM SIGINT SIGQUIT
 
+# Object detection AI preset — comment the next line to disable AI post-processing
+# POST_PROCESS_FILE="/usr/share/rpi-camera-assets/imx500_mobilenet_ssd.json"
+
+# Build optional rpicam-vid args (empty when POST_PROCESS_FILE is commented out)
+if [[ -n "${POST_PROCESS_FILE:-}" ]]; then
+    RPICAM_EXTRA_ARGS="--post-process-file ${POST_PROCESS_FILE}"
+else
+    RPICAM_EXTRA_ARGS=""
+fi
+
 echo "[camera-stream] Starting IMX500 capture pipeline..."
 
 rpicam-vid \
@@ -26,7 +36,7 @@ rpicam-vid \
     --height 480 \
     --framerate 30 \
     --bitrate 2500000 \
-    --post-process-file /usr/share/rpi-camera-assets/imx500_mobilenet_ssd.json \
+    ${RPICAM_EXTRA_ARGS} \
     -o - | \
 ffmpeg \
     -hide_banner \
