@@ -40,7 +40,7 @@ First connection will prompt `Are you sure you want to continue connecting?` —
 From your Mac, in the directory that contains `rpi-cam-stream.zip`, copy the zip to the Pi:
 
 ```bash
-scp rpi-cam-stream.zip test@pi.local:~
+scp rpi-cam-stream.zip test@pi.local:~/rpi-cam/
 ```
 
 > If `pi.local` doesn't resolve, substitute the Pi's IP: `scp rpi-cam-stream.zip test@<pi-local-ip>:~`
@@ -49,20 +49,85 @@ Then SSH into the Pi and extract:
 
 ```bash
 ssh test@pi.local
+cd rpi-cam
 unzip -o rpi-cam-stream.zip
 ```
 
 > `unzip -o` overwrites existing files without prompting — useful when re-deploying.
 
-**Optional — keep your home directory tidy** by extracting into a subdirectory:
+---
+
+## Step 2.5 — Pin your hotspot as the priority Wi-Fi (optional but recommended)
+
+If the Pi connects to your phone hotspot, run this once so it always picks the hotspot quickly and never drops the link due to Wi-Fi power saving:
 
 ```bash
-mkdir -p rpi-cam && unzip -o rpi-cam-stream.zip -d rpi-cam && cd rpi-cam
+sudo bash wifi-priority.sh "OnePlus 12"
 ```
+
+Replace `"OnePlus 12"` with your hotspot's SSID (use quotes if it has spaces). The script:
+- Disables Wi-Fi power management (live + permanently via `/etc/NetworkManager/conf.d/wifi-powersave-off.conf`)
+- Sets the matching profile(s) to `autoconnect yes`, priority `10`, retries `0` (forever)
+- Prints a verification block, then reboots so everything comes back clean
+
+If you've never connected the Pi to that hotspot before, connect once first:
+
+```bash
+sudo nmcli device wifi connect "OnePlus 12" --ask
+```
+
+then re-run `wifi-priority.sh`.
 
 ---
 
-## Step 3 — Run the Installer
+## Step 3 — Set Up Tailscale on the Pi (one command)
+
+Tailscale is the VPN that lets you access the stream from anywhere without port forwarding. Do this **before** running the installer so the deploy step can verify the connection.
+
+```bash
+sudo bash tailscale-setup.sh
+```
+
+The script installs Tailscale, starts `tailscaled`, and runs `tailscale up`. You will see a URL printed in the terminal like this:
+
+```
+To authenticate, visit:
+
+    https://login.tailscale.com/a/xxxxxxxxxxxxxxx
+```
+
+> **Important:** You cannot open a browser on the Pi. Copy this URL and open it on your Mac's browser to authenticate.
+
+**Authenticate:**
+
+1. Copy the `https://login.tailscale.com/a/xxx...` URL from the Pi terminal
+2. Paste it into your Mac's browser
+3. Sign in or create a free Tailscale account
+4. The Pi joins your tailnet automatically once you authenticate
+
+When the script finishes you should see:
+
+```
+[+] Tailscale is up.
+[i] Hostname:     <your-pi-hostname>
+[i] Tailnet IPv4: 100.x.x.x
+[i] SSH access:   ssh test@100.x.x.x
+[+] Next step: sudo bash deploy.sh
+```
+
+Note down the `100.x.x.x` Tailscale IP — you'll need it from your Mac.
+
+**Optional — non-interactive setup** with a pre-generated [Tailscale auth key](https://login.tailscale.com/admin/settings/keys):
+
+```bash
+TS_AUTHKEY=tskey-auth-xxxxxxxxxxxx sudo -E bash tailscale-setup.sh
+```
+
+You can also override the tailnet hostname with `TS_HOSTNAME=rpi-cam`. The script is **idempotent** — safe to re-run; it will skip steps that are already done.
+
+---
+
+## Step 4 — Run the Installer
 
 ```bash
 sudo bash deploy.sh
@@ -83,42 +148,7 @@ MediaMTX        running
 Camera stream   running
 ```
 
----
-
-## Step 4 — Install Tailscale on the Pi
-
-Tailscale is the VPN that lets you access the stream from anywhere without port forwarding.
-
-**Install:**
-
-```bash
-curl -fsSL https://tailscale.com/install.sh | sh
-```
-
-**Connect:**
-
-```bash
-sudo tailscale up
-```
-
-You will see a URL printed in the terminal like this:
-
-```
-To authenticate, visit:
-
-    https://login.tailscale.com/a/xxxxxxxxxxxxxxx
-```
-
-> **Important:** You cannot open a browser on the Pi. Copy this URL and open it on your Mac's browser instead.
-
-**Authenticate:**
-
-1. Copy the `https://login.tailscale.com/a/xxx...` URL from the Pi terminal
-2. Paste it into your Mac's browser
-3. Sign in or create a free Tailscale account
-4. The Pi will automatically connect once you authenticate
-
-**Verify it worked:**
+**Verify everything is up:**
 
 ```bash
 cam-ctrl test
@@ -132,8 +162,6 @@ You should see:
 ✓ API is reachable
 ✓ Tailscale connected — IP: 100.x.x.x
 ```
-
-Note down the Tailscale IP shown — you'll need it to connect from your Mac.
 
 ---
 
@@ -266,6 +294,14 @@ You never need to run `deploy.sh` again. The services are permanently installed 
 
 ## Quick Troubleshooting
 
+**First port of call — run the full diagnostic report on the Pi:**
+
+```bash
+bash diagnose.sh
+```
+
+This walks through every layer (camera hardware, encoder, services, ports, MediaMTX API, Tailscale, local stream playback) and tells you exactly which step is failing. No sudo required.
+
 **Stream times out from Mac:**
 - Make sure Tailscale is running on your Mac (check menu bar icon)
 - Make sure you're signed into the same Tailscale account on both devices
@@ -294,3 +330,37 @@ sudo cam-ctrl restart
 sudo tailscale status
 sudo tailscale up
 ```
+
+If Tailscale was never installed (e.g., you skipped Step 3), just run the setup script again — it's idempotent:
+
+```bash
+sudo bash tailscale-setup.sh
+```
+
+---
+
+## Uninstall (start over from scratch)
+
+If you want to wipe everything this project installed — for example, to re-deploy cleanly or to repurpose the Pi:
+
+```bash
+sudo bash uninstall.sh
+```
+
+The script will:
+- Stop and disable the `mediamtx` and `camera-stream` services
+- Remove `/usr/local/bin/{mediamtx, camera-stream.sh, cam-ctrl}`
+- Remove `/etc/mediamtx/`
+- Ask **separately** whether to also remove Tailscale and ffmpeg (default: no, because you might use them for other things)
+
+It will **not** touch:
+- Your `rpi-cam` folder (the zip extract) — re-running `deploy.sh` from it gets you back up
+- Your home directory or any other files
+
+For a fully scripted uninstall with no prompts:
+
+```bash
+sudo bash uninstall.sh --yes --keep-tailscale --keep-ffmpeg
+```
+
+Flags: `--tailscale` / `--keep-tailscale` and `--ffmpeg` / `--keep-ffmpeg` decide each optional component upfront so the script can run unattended.

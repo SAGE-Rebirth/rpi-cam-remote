@@ -46,6 +46,19 @@ All services run as **systemd units** — they start on boot, restart on crash, 
 
 ---
 
+## Quick Start
+
+On a fresh Pi, two commands get everything running:
+
+```bash
+sudo bash tailscale-setup.sh    # joins the Pi to your tailnet
+sudo bash deploy.sh             # installs MediaMTX, services, cam-ctrl
+```
+
+Both scripts are idempotent — safe to re-run after edits.
+
+---
+
 ## Hardware Requirements
 
 - Raspberry Pi 4 or 5 (aarch64)
@@ -67,7 +80,25 @@ All services run as **systemd units** — they start on boot, restart on crash, 
 
 ---
 
-## File Layout
+## Repo Layout
+
+The files you copy to the Pi:
+
+```
+tailscale-setup.sh    ← One-command Tailscale install + join (run first)
+wifi-priority.sh      ← Pin a hotspot SSID as the priority network + powersave off
+deploy.sh             ← Full installer (embeds everything below)
+diagnose.sh           ← Read-only health report (no sudo required)
+uninstall.sh          ← Removes everything deploy.sh installed
+cam-ctrl              ← Reference copy of the management CLI
+camera-stream.sh      ← Reference copy of the camera pipeline wrapper
+camera-stream.service ← Reference copy of the camera systemd unit
+mediamtx.yml          ← Reference copy of MediaMTX config
+mediamtx.service      ← Reference copy of the MediaMTX systemd unit
+README.md / SETUP.md  ← This documentation
+```
+
+## Installed File Layout
 
 After running `deploy.sh`, files are installed to these system locations:
 
@@ -241,11 +272,53 @@ Key ports:
 
 ---
 
+## Wi-Fi Reliability (optional but recommended for hotspot use)
+
+If the Pi tethers to a phone hotspot, two NetworkManager defaults will bite you: Wi-Fi power saving causes slow / dropped reconnects, and other saved networks may auto-connect ahead of the hotspot. `wifi-priority.sh` fixes both in one shot.
+
+```bash
+sudo bash wifi-priority.sh                  # defaults to "OnePlus 12"
+sudo bash wifi-priority.sh "MyHotspot"      # custom SSID
+sudo bash wifi-priority.sh "MyHotspot" --no-reboot
+```
+
+What it does:
+- Writes `/etc/NetworkManager/conf.d/wifi-powersave-off.conf` (`wifi.powersave = 2`) to disable Wi-Fi power management permanently and globally.
+- Disables powersave on the live `wlan0` immediately (`iw` or `iwconfig`).
+- Finds every NM profile whose SSID matches (catches both `"OnePlus 12"` and `"netplan-wlan0-OnePlus 12"`-style netplan-imported profiles) and applies:
+  - `connection.autoconnect yes`
+  - `connection.autoconnect-priority 10`
+  - `connection.autoconnect-retries 0` (forever)
+  - `802-11-wireless.powersave 2`
+- Reloads NetworkManager, prints verification (`iwconfig`/`iw` + the relevant `nmcli` fields), and reboots (confirms first; `--yes` skips, `--no-reboot` exits cleanly).
+
+Idempotent — safe to re-run after changing phones / hotspot names.
+
+---
+
+## Diagnostics & Uninstall
+
+**`diagnose.sh` — full health report.** Goes deeper than `cam-ctrl test`: checks Pi model, IMX500 detection, video device nodes, video/render group membership, encoder toolchain, zerolatency tune verification (looks for `Constrained Baseline` in the journal), MediaMTX paths via the REST API, Tailscale state, port listeners, and a live ffprobe of the local RTSP. Read-only — no sudo needed; exits non-zero on failure so it can also be used from scripts.
+
+```bash
+bash diagnose.sh
+```
+
+**`uninstall.sh` — clean removal.** Stops/disables both services, removes the installed binaries, scripts, systemd units, and `/etc/mediamtx/`. Asks separately before removing Tailscale or ffmpeg (since both may be used outside this project). Leaves the `rpi-cam` folder and your home directory untouched.
+
+```bash
+sudo bash uninstall.sh
+# Fully scripted:
+sudo bash uninstall.sh --yes --keep-tailscale --keep-ffmpeg
+```
+
+---
+
 ## Troubleshooting
 
 **Stream times out / connection refused**
 ```bash
-cam-ctrl test          # check which component is failing
+bash diagnose.sh       # full picture: services + camera + ports + API
 cam-ctrl logs          # read error details
 sudo cam-ctrl restart-all
 ```
@@ -258,6 +331,8 @@ sudo cam-ctrl restart-all
 ```bash
 sudo tailscale status
 sudo tailscale up
+# Or, if Tailscale was never installed:
+sudo bash tailscale-setup.sh
 ```
 
 **Camera-stream keeps restarting**
